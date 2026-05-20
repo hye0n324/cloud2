@@ -1,38 +1,67 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
 import './App.css'
 
 function App() {
-  const [todos, setTodos] = useState([
-    { id: 1, text: 'Learn React', completed: false },
-    { id: 2, text: 'Build a Todo App', completed: true },
-  ])
+  const [todos, setTodos] = useState([])
   const [inputValue, setInputValue] = useState('')
+  const API_URL = 'http://localhost:8080/api/todos'
+
+  // Fetch todos from backend on mount
+  useEffect(() => {
+    fetch(API_URL)
+      .then((res) => res.json())
+      .then((data) => setTodos(data))
+      .catch((err) => console.error('Error fetching todos:', err))
+  }, [])
 
   const addTodo = (e) => {
     e.preventDefault()
     if (!inputValue.trim()) return
+
     const newTodo = {
-      id: Date.now(),
       text: inputValue,
       completed: false,
     }
-    setTodos([...todos, newTodo])
-    setInputValue('')
+
+    fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTodo),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setTodos([...todos, data])
+        setInputValue('')
+      })
+      .catch((err) => console.error('Error adding todo:', err))
   }
 
-  const toggleTodo = (id) => {
-    setTodos(
-      todos.map((todo) =>
-        todo.id === id ? { ...todo, completed: !todo.completed } : todo
-      )
-    )
+  const toggleTodo = (todo) => {
+    const updatedTodo = { ...todo, completed: !todo.completed }
+
+    fetch(`${API_URL}/${todo.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedTodo),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setTodos(todos.map((t) => (t.id === data.id ? data : t)))
+      })
+      .catch((err) => console.error('Error updating todo:', err))
   }
 
   const deleteTodo = (id) => {
-    setTodos(todos.filter((todo) => todo.id !== id))
+    fetch(`${API_URL}/${id}`, {
+      method: 'DELETE',
+    })
+      .then(() => {
+        setTodos(todos.filter((todo) => todo.id !== id))
+      })
+      .catch((err) => console.error('Error deleting todo:', err))
   }
 
   return (
@@ -65,7 +94,7 @@ function App() {
           <ul className="todo-list">
             {todos.map((todo) => (
               <li key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
-                <span onClick={() => toggleTodo(todo.id)} className="todo-text">
+                <span onClick={() => toggleTodo(todo)} className="todo-text">
                   {todo.text}
                 </span>
                 <button
