@@ -1,200 +1,228 @@
 import { useState, useEffect } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
 import './App.css'
 
 function App() {
-  const [todos, setTodos] = useState([])
-  const [inputValue, setInputValue] = useState('')
-  const API_URL = 'http://localhost:8080/api/todos'
+  const [viewMode, setViewMode] = useState('list') // list, detail, create, edit
+  const [posts, setPosts] = useState([])
+  const [selectedPost, setSelectedPost] = useState(null)
+  const API_URL = import.meta.env.VITE_API_URL
 
-  // Fetch todos from backend on mount
-  useEffect(() => {
+  // Fetch all posts
+  const fetchPosts = () => {
+    console.log(`[API CALL] GET ${API_URL}`);
     fetch(API_URL)
       .then((res) => res.json())
-      .then((data) => setTodos(data))
-      .catch((err) => console.error('Error fetching todos:', err))
+      .then((data) => setPosts(data))
+      .catch((err) => console.error('Error fetching posts:', err))
+  }
+
+  useEffect(() => {
+    fetchPosts()
   }, [])
 
-  const addTodo = (e) => {
-    e.preventDefault()
-    if (!inputValue.trim()) return
-
-    const newTodo = {
-      text: inputValue,
-      completed: false,
-    }
-
+  const handleCreate = (postData) => {
+    console.log(`[API CALL] POST ${API_URL}`, postData);
     fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newTodo),
+      body: JSON.stringify(postData),
     })
       .then((res) => res.json())
-      .then((data) => {
-        setTodos([...todos, data])
-        setInputValue('')
+      .then(() => {
+        fetchPosts()
+        setViewMode('list')
       })
-      .catch((err) => console.error('Error adding todo:', err))
+      .catch((err) => console.error('Error creating post:', err))
   }
 
-  const toggleTodo = (todo) => {
-    const updatedTodo = { ...todo, completed: !todo.completed }
-
-    fetch(`${API_URL}/${todo.id}`, {
+  const handleUpdate = (id, postData) => {
+    const url = `${API_URL}/${id}`;
+    console.log(`[API CALL] PUT ${url}`, postData);
+    fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedTodo),
+      body: JSON.stringify(postData),
     })
       .then((res) => res.json())
-      .then((data) => {
-        setTodos(todos.map((t) => (t.id === data.id ? data : t)))
+      .then(() => {
+        fetchPosts()
+        setViewMode('list')
       })
-      .catch((err) => console.error('Error updating todo:', err))
+      .catch((err) => console.error('Error updating post:', err))
   }
 
-  const deleteTodo = (id) => {
-    fetch(`${API_URL}/${id}`, {
-      method: 'DELETE',
-    })
-      .then(() => {
-        setTodos(todos.filter((todo) => todo.id !== id))
-      })
-      .catch((err) => console.error('Error deleting todo:', err))
+  const handleDelete = (id) => {
+    const url = `${API_URL}/${id}`;
+    if (window.confirm('Are you sure you want to delete this post?')) {
+      console.log(`[API CALL] DELETE ${url}`);
+      fetch(url, { method: 'DELETE' })
+        .then(() => {
+          fetchPosts()
+          setViewMode('list')
+        })
+        .catch((err) => console.error('Error deleting post:', err))
+    }
   }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Todo List</h1>
-          <p>Manage your daily tasks efficiently.</p>
-        </div>
+    <div className="board-app">
+      <header className="board-header">
+        <h1>Simple Board</h1>
+        <p className="subtitle">React + Spring MVC (Layered Architecture)</p>
+      </header>
 
-        <div className="todo-container">
-          <form onSubmit={addTodo} className="todo-input-group">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="What needs to be done?"
-              className="todo-input"
+      <main className="board-main">
+        {viewMode === 'list' && (
+          <PostList 
+            posts={posts} 
+            onSelect={(post) => { setSelectedPost(post); setViewMode('detail'); }}
+            onCreateView={() => setViewMode('create')}
+          />
+        )}
+
+        {viewMode === 'detail' && selectedPost && (
+          <PostDetail 
+            post={selectedPost} 
+            onBack={() => setViewMode('list')}
+            onEdit={() => setViewMode('edit')}
+            onDelete={() => handleDelete(selectedPost.id)}
+          />
+        )}
+
+        {(viewMode === 'create' || viewMode === 'edit') && (
+          <PostForm 
+            mode={viewMode}
+            post={viewMode === 'edit' ? selectedPost : null}
+            onSave={(data) => viewMode === 'create' ? handleCreate(data) : handleUpdate(selectedPost.id, data)}
+            onCancel={() => setViewMode('list')}
+          />
+        )}
+      </main>
+
+      <footer className="board-footer">
+        <p>&copy; 2026 Board Project. All rights reserved.</p>
+      </footer>
+    </div>
+  )
+}
+
+function PostList({ posts, onSelect, onCreateView }) {
+  return (
+    <div className="post-list-container">
+      <div className="list-toolbar">
+        <h2>Post List</h2>
+        <button onClick={onCreateView} className="btn btn-primary">Write Post</button>
+      </div>
+      <table className="post-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {posts.map((post) => (
+            <tr key={post.id} onClick={() => onSelect(post)} className="clickable-row">
+              <td>{post.id}</td>
+              <td className="post-title-cell">{post.title}</td>
+              <td>{post.author}</td>
+              <td>{new Date(post.createdAt).toLocaleDateString()}</td>
+            </tr>
+          ))}
+          {posts.length === 0 && (
+            <tr>
+              <td colSpan="4" className="empty-msg">No posts yet. Start by writing one!</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function PostDetail({ post, onBack, onEdit, onDelete }) {
+  return (
+    <div className="post-detail-container">
+      <div className="detail-card">
+        <div className="detail-header">
+          <h2>{post.title}</h2>
+          <div className="post-meta">
+            <span><strong>Author:</strong> {post.author}</span>
+            <span><strong>Date:</strong> {new Date(post.createdAt).toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="post-body">
+          {post.content}
+        </div>
+        <div className="detail-actions">
+          <button onClick={onBack} className="btn">Back to List</button>
+          <div className="admin-actions">
+            <button onClick={onEdit} className="btn btn-secondary">Edit</button>
+            <button onClick={onDelete} className="btn btn-danger">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PostForm({ mode, post, onSave, onCancel }) {
+  const [title, setTitle] = useState(post ? post.title : '')
+  const [author, setAuthor] = useState(post ? post.author : '')
+  const [content, setContent] = useState(post ? post.content : '')
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!title.trim() || !author.trim() || !content.trim()) {
+      alert('Please fill in all fields')
+      return
+    }
+    onSave({ title, author, content })
+  }
+
+  return (
+    <div className="post-form-container">
+      <div className="form-card">
+        <h2>{mode === 'create' ? 'New Post' : 'Edit Post'}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Title</label>
+            <input 
+              type="text" 
+              value={title} 
+              onChange={(e) => setTitle(e.target.value)} 
+              placeholder="Enter title"
+              autoFocus
             />
-            <button type="submit" className="todo-add-btn">
-              Add
-            </button>
-          </form>
-
-          <ul className="todo-list">
-            {todos.map((todo) => (
-              <li key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
-                <span onClick={() => toggleTodo(todo)} className="todo-text">
-                  {todo.text}
-                </span>
-                <button
-                  onClick={() => deleteTodo(todo.id)}
-                  className="todo-delete-btn"
-                >
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+          </div>
+          <div className="form-group">
+            <label>Author</label>
+            <input 
+              type="text" 
+              value={author} 
+              onChange={(e) => setAuthor(e.target.value)} 
+              placeholder="Enter your name"
+              disabled={mode === 'edit'}
+            />
+          </div>
+          <div className="form-group">
+            <label>Content</label>
+            <textarea 
+              rows="12" 
+              value={content} 
+              onChange={(e) => setContent(e.target.value)} 
+              placeholder="Write your content here..."
+            ></textarea>
+          </div>
+          <div className="form-footer">
+            <button type="button" onClick={onCancel} className="btn">Cancel</button>
+            <button type="submit" className="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
 
